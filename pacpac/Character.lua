@@ -67,16 +67,14 @@ end
 function Character:speed()
   local hotel_pos = level.ghost_hotel.outside
   if self.shape == 'hero' then return 4 end
+
   if self:is_dead() then
     -- The dead move fast, except near the hotel so they don't miss the door.
     if self:dist_to_pt(hotel_pos) < 1 then return 4 end
     return 8
   end
-  if self:is_weak() then
-    return 2.5
-  else
-    return 4
-  end
+  if self:is_weak() then return 6 end
+  return 5
 end
 
 function Character:target()
@@ -85,8 +83,13 @@ function Character:target()
   if self:is_dead() then return hotel.inside end
   if self.mode == 'freemove' then return hotel.outside end
   if self:is_weak() then
-    return {math.random() * 19, math.random() * 22}
+    -- return {math.random() * 19, math.random() * 22}
   end
+
+  if ghost_mode == 'runaway' then
+	return {math.random() * 19, math.random() * 22}
+  end
+
   if self.color == 'red' then
     if ghost_mode == 'scatter' then return {18.5, 2.5} end
     if ghost_mode == 'pursue' then
@@ -232,7 +235,7 @@ function Character:update(dt)
       print('Current dir=(' .. self.dir[1] .. ', ' .. self.dir[2] .. ')')
       ask_to_report_error()
     end
-    
+
     self.mode = 'freemove'
     self.exit_time = math.huge
     self.dir = {0, -1}
@@ -318,15 +321,18 @@ function Character:check_for_side_warps()
 end
 
 function Character:register_dots_eaten()
-  if self.shape ~= 'hero' then return end
+  if self.shape == 'hero' then return end
+  if self:is_dead() then return end
+
   local dots_hit = dots_hit_by_man_at_xy(self.x, self.y)
   for k, v in pairs(dots_hit) do
     if dots[k] then
       if superdots[k] then superdot_eaten() end
       dots[k] = nil
       num_dots = num_dots - 1
-      add_to_score(10)
-      play_wata_till = clock + 0.2
+
+      -- if self.shape == 'hero' then add_to_score(-10) end
+	  play_wata_till = clock + 0.2
       wata:play()
       if num_dots <= dots_at_end then
         pause_till = math.huge

@@ -18,7 +18,7 @@ local util = require('util')
 version = "0.301"
 
 map = nil
-num_levels = 3
+num_levels = 1
 
 -- This can be 'start screen' or 'playing'.
 game_mode = nil
@@ -42,7 +42,6 @@ super_mode_till = -1
 death_anim_till = -1
 
 man = nil  -- A Character object for the hero.
-red = nil
 characters = {}  -- All moving Character objects = man + ghosts.
 
 ghost_mode = 'scatter'
@@ -57,9 +56,6 @@ next_ghost_score = 200
 death_anim_time = 2
 
 jstick = nil
-jstick_img = nil
-jstick_overlay = nil
-keybd_img = nil
 
 logo = nil
 large_font = nil
@@ -117,10 +113,10 @@ end
 -- This is a workaround for an infrequent but annoying audio bug where clips
 -- simply stop playing and need to be recreated as new objects.
 function PacSource:play()
-  if self.src:isPaused() or self.src:isStopped() then
+  if not self.src:isPlaying() then
     self.src:play()
   end
-  if self.src:isPaused() then
+  if not self.src:isPlaying() then
     -- Here is the workaround. Theoretically, this block should never happen.
     -- But it does.
     local is_looping = self.src:isLooping()
@@ -131,17 +127,18 @@ function PacSource:play()
 end
 
 function PacSource:pause()
-  if not self.src:isPaused() and not self.src:isStopped() then
+  if self.src:isPlaying() then
     self.src:pause()
   end
 end
 
 function PacSource:setLooping(should_loop) self.src:setLooping(should_loop) end
-function PacSource:isPaused() return self.src:isPaused() end
+function PacSource:isPaused() return not self.src:isPlaying() end
 function PacSource:setVolume(volume) self.src:setVolume(volume) end
 function PacSource:stop() self.src:stop() end
 function PacSource:rewind() self.src:rewind() end
 
+love.window.setFullscreen(true)
 
 -------------------------------------------------------------------------------
 -- Non-love functions.
@@ -152,37 +149,41 @@ function superdot_eaten()
     if c.shape == 'ghost' then c.eaten = false end
   end
   super_mode_till = clock + 6.0
-  add_to_score(40)  -- An additional +10 is given for every dot.
-  next_ghost_score = 200
+  -- add_to_score(-40)  -- An additional +10 is given for every dot.
+  -- next_ghost_score = 200
 end
 
--- Sets ghost_mode to either 'scatter' or 'pursue', based on a 26-second cycle,
--- where the first 6 seconds are scatter, and the next 20 are pursue.
 function update_ghost_mode()
   local cycle_point = clock % 26
-  if cycle_point < 6 then
+  if cycle_point < 8 then
     ghost_mode = 'scatter'
   else
-    ghost_mode = 'pursue'
+    ghost_mode = 'runaway'
   end
 end
 
 -- The input x, y is the center of the dot in tile-based coordinates.
 function draw_one_dot(x, y, is_superdot)
-  local dot_size = 2
+  local dot_size = 0.03
+
   is_superdot = is_superdot or superdots[util.str({x, y})]
-  if is_superdot then dot_size = 6 end
+  if is_superdot then dot_size = 0.05 end
   local flash_rate = 0.2  -- In seconds.
+
   -- Don't draw superdots every other cycle.
   if is_superdot and math.floor(clock / flash_rate) % 2 == 1 and
      pause_till <= clock then
     return
   end
   draw.setColor(255, 220, 128)
-  love.graphics.circle('fill',
-                       x * tile_size,
-                       y * tile_size,
-                       dot_size, 10)
+
+  local cookie_w = (cookie:getWidth() * dot_size) / 2
+
+  love.graphics.draw(cookie,
+  	(x * tile_size)-cookie_w,
+	(y * tile_size)-cookie_w,
+	0, dot_size)
+
 end
 
 function draw_dots()
@@ -373,7 +374,7 @@ function level_won()
 end
 
 function show_victory()
-  message = 'You Win! w00t'
+  message = 'Game Over'
   game_ended()
 end
 
@@ -394,16 +395,18 @@ end
 function check_for_hit()
   for k, character in pairs(characters) do
     if character ~= man and man:dist(character) < 0.5 then
-      if character:is_weak() then
+	  if character:is_weak() then return end
+
+      -- if character:is_weak() then
         play_nomnom()
-        character.dead_till = math.huge
+    	character.dead_till = math.huge
         character.eaten = true
         add_ghost_eaten_score(next_ghost_score, character.x, character.y)
-        next_ghost_score = next_ghost_score * 2
-      elseif not is_invincible then
+        next_ghost_score = next_ghost_score -- *2
+      --[[ elseif not is_invincible then
         death_noise:play()
         lives_left = lives_left - 1
-        message = 'oops'
+        message = 'Uh-oh'
         show_message_till = math.huge
         pause_till = math.huge
 
@@ -420,7 +423,8 @@ function check_for_hit()
         else
           events.add(death_anim_time, begin_play)
         end
-      end
+		]]
+      -- end
     end
   end
 end
@@ -647,9 +651,7 @@ function setup_characters()
   man = Character.new('hero', 'yellow')
   table.insert(characters, man)
 
-  red = Character.new('ghost', 'red')
-  table.insert(characters, red)
-
+  table.insert(characters, Character.new('ghost', 'red'))
   table.insert(characters, Character.new('ghost', 'pink'))
   table.insert(characters, Character.new('ghost', 'blue'))
   table.insert(characters, Character.new('ghost', 'orange'))
@@ -711,7 +713,7 @@ function draw_ready_text()
 end
 
 function character_dance(dir)
-  local y = 16
+  local y = 17
   local tw = math.floor(love.graphics.getWidth() / tile_size)
   for k, c in pairs(characters) do
     local j = k
@@ -727,7 +729,7 @@ end
 
 function setup_start_screen_characters()
   characters = {}
-  local y = 25
+  local y = 100
   local colors = {'yellow', 'red', 'pink', 'blue', 'orange'}
   local tw = math.floor(love.graphics.getWidth() / tile_size)
 
@@ -748,11 +750,24 @@ function setup_start_screen_characters()
 end
 
 function draw_start_text()
-  local w = love.graphics.getWidth()
-  local dy = -50
-  love.graphics.setFont(large_font)
-  draw.setColor(255, 255, 255)
-  love.graphics.printf('Start', 0, 400 + dy, w, 'center')
+	local w = love.graphics.getWidth()
+	local dy = -50
+	love.graphics.setFont(large_font)
+	draw.setColor(255, 255, 255)
+
+	love.graphics.printf('Your life relies on cookies.',0, 680+dy, w,'center')
+	love.graphics.printf('The MONSTERS are getting stronger and the COOKIES are near extinction.',0, 720+dy, w,'center')
+	love.graphics.printf('It’s a race against time!',0, 760+dy, w,'center')
+
+	love.graphics.printf('How many Monsters can you gobble up before the cookies disappear?', 0, 850 + dy, w, 'center')
+
+	love.graphics.printf('Press button to start', 0, 900 + dy, w, 'center')
+
+
+
+	love.graphics.setFont(small_font)
+	love.graphics.printf('Cookiepocalypse is not endorsed by or affiliated with Bandai Namco Entertainment', 0, 980+dy, w, 'center')
+
 
   if math.floor(clock / 0.3) % 2 == 0 then
     draw.setColor(100, 100, 100)
@@ -760,35 +775,15 @@ function draw_start_text()
     draw.setColor(0, 0, 0)
   end
   local vertices = {568, 409 + dy, 583, 417 + dy, 568, 425 + dy}
-  love.graphics.polygon('fill', vertices)
+  -- love.graphics.polygon('fill', vertices)
 end
 
 function draw_controls()
-  local w = love.graphics.getWidth()
-  local x, y = 528, 500
-  draw.setColor(255, 255, 255)
-  if jstick then
-    love.graphics.draw(jstick_img, x, y)
-    local alpha = 255 * (math.sin(clock * 5) + 1) / 2
-    draw.setColor(alpha, alpha, alpha)
-    love.graphics.draw(jstick_overlay, x, y)
-  else
-    love.graphics.draw(keybd_img, (w - 200) / 2, y)
-  end
-
-  love.graphics.setFont(small_font)
-  draw.setColor(255, 255, 255)
-  if jstick then
-    love.graphics.print('Controls', 578, 631)
-  else
-    love.graphics.printf('Controls', 0, 631, w, 'center')
-    draw.setColor(80, 80, 80)
-    love.graphics.printf('no gamepad detected', 0, 651, w, 'center')
-  end
+  -- Let's not draw the controls...
 end
 
 function load_hi_score()
-  if not love.filesystem.exists('hi_score') then
+  if not love.filesystem.getInfo('hi_score') then
     hi_score = 1000
     return
   end
@@ -870,7 +865,8 @@ end
 -------------------------------------------------------------------------------
 
 function draw_playing()
-  love.graphics.translate(345, 15)
+  local middle = love.graphics.getWidth()/2
+  love.graphics.translate(middle-295, 15)
 
   -- Draw walls.
   for x = 1, #map do for y = 1, #(map[1]) do
@@ -938,10 +934,8 @@ function love.load()
   small_font = love.graphics.newFont('8bitoperator_jve.ttf', 16)
   large_font = love.graphics.newFont('8bitoperator_jve.ttf', 32)
 
-  logo = love.graphics.newImage('img/pacpac_logo.png')
-  jstick_img = love.graphics.newImage('img/gamepad.png')
-  jstick_overlay = love.graphics.newImage('img/gamepad_overlay.png')
-  keybd_img = love.graphics.newImage('img/arrow_keys.png')
+  logo = love.graphics.newImage('img/cookie-pocalypse-logo.png')
+  cookie = love.graphics.newImage('img/cookie.png')
 
   open_noise = PacSource.new('audio/open.ogg')
   open_noise:setVolume(0.5)
